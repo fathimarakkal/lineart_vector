@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vector Epicycles Drawer</title>
+    <!-- Use a Google Font for a modern aesthetic -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --text-color: #f8fafc;
+            --accent-color: #38bdf8;
+            --primary-btn: #3b82f6;
+            --primary-btn-hover: #2563eb;
+            --border-color: #334155;
+            --circle-color: rgba(148, 163, 184, 0.2);
+            --line-color: rgba(148, 163, 184, 0.5);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 40px 20px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(to right, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: transparent;
+            text-align: center;
+        }
+
+        p {
+            color: #94a3b8;
+            margin-bottom: 30px;
+            text-align: center;
+            max-width: 600px;
+            line-height: 1.5;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            align-items: center;
+            background-color: var(--panel-bg);
+            padding: 20px 30px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15);
+        }
+
+        input[type="file"] {
+            font-family: inherit;
+            color: var(--text-color);
+        }
+
+        input[type="file"]::file-selector-button {
+            background-color: var(--border-color);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-right: 15px;
+            font-weight: 600;
+            transition: background 0.2s ease;
+        }
+
+        input[type="file"]::file-selector-button:hover {
+            background-color: #475569;
+        }
+
+        button {
+            background-color: var(--primary-btn);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: var(--primary-btn-hover);
+            transform: translateY(-1px);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background-color: #475569;
+            color: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        #loading {
+            display: none;
+            color: var(--accent-color);
+            font-weight: 600;
+            margin-bottom: 20px;
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .canvas-container {
+            position: relative;
+            background-color: var(--panel-bg);
+            border-radius: 12px;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            border-radius: 8px;
+            background-color: #0f172a;
+            /* Deep dark for contrast */
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Vector Epicycles</h1>
+    <p>Upload a high-contrast image (like a silhouette or line drawing). The system will extract the dark paths, compute
+        mathematical Vector coefficients, and draw the image using rotating circles.</p>
+
+    <div class="controls">
+        <input type="file" id="imageInput" accept="image/*">
+        <button id="drawBtn" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            Compute & Draw
+        </button>
+    </div>
+
+    <div id="loading">Crunching Vector Math... Give it a moment!</div>
+
+    <div class="canvas-container">
+        <!-- Render resolution 800x600 -->
+        <canvas id="canvas" width="800" height="600"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const imageInput = document.getElementById('imageInput');
+        const drawBtn = document.getElementById('drawBtn');
+        const loading = document.getElementById('loading');
+
+        let isDrawing = false;
+        let animationFrameId = null;
+        let vectorData = [];
+        let time = 0;
+        let drawnPath = [];
+
+        // When a file is selected, enable the button
+        imageInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files.length > 0) {
+                drawBtn.disabled = false;
+            } else {
+                drawBtn.disabled = true;
+            }
+        });
+
+        // Start processing when clicked
+        drawBtn.addEventListener('click', () => {
+            const file = imageInput.files[0];
+            if (!file) return;
+
+            // Update UI
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            isDrawing = false;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            loading.style.display = 'block';
+            drawBtn.disabled = true;
+
+            const img = new Image();
+            img.src = URL.createObjectURL(file);
+
+            img.onload = () => {
+                // Short timeout to let the browser render the loading text
+                setTimeout(() => {
+                    processImageAndComputeDFT(img);
+                }, 50);
+            };
+        });
+
+        function processImageAndComputeDFT(img) {
+            // 1. Draw downscaled image onto internal canvas to get target pixel points
+            const tempCanvas = document.createElement('canvas');
+            const tCtx = tempCanvas.getContext('2d');
+
+            const maxSize = 200; // Cap image dimensions to control point count
+            let w = img.width;
+            let h = img.height;
+            if (w > h) {
+                h = Math.floor(h * (maxSize / w)); w = maxSize;
+            } else {
+                w = Math.floor(w * (maxSize / h)); h = maxSize;
+            }
+            // Add a little padding to center the drawing on canvas
+            tempCanvas.width = w;
+            tempCanvas.height = h;
+
+            // Draw image on white background to avoid transparent issues
+            tCtx.fillStyle = '#ffffff';
+            tCtx.fillRect(0, 0, w, h);
+            tCtx.drawImage(img, 0, 0, w, h);
+
+            const imgData = tCtx.getImageData(0, 0, w, h).data;
+            let blackPixels = [];
+
+            // 2. Extract dark pixels 
+            // We sample pixels by skipping every other pixel for speed
+            for (let y = 0; y < h; y += 2) {
+                for (let x = 0; x < w; x += 2) {
+                    const idx = (y * w + x) * 4;
+                    const r = imgData[idx];
+                    const g = imgData[idx + 1];
+                    const b = imgData[idx + 2];
+
+                    // Simple grayscale brightness calculation
+                    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+                    if (brightness < 128) {
+                        // Adjust coordinates to be centered relative to main canvas center
+                        // Multiply coordinates so it fills the screen more nicely
+                        const scale = Math.min(canvas.width / w, canvas.height / h) * 0.8;
+                        blackPixels.push({
+                            x: (x - w / 2) * scale,
+                            y: (y - h / 2) * scale
+                        });
+                    }
+                }
+            }
+
+            if (blackPixels.length === 0) {
+                loading.style.display = 'none';
+                drawBtn.disabled = false;
+                alert("Could not detect clear dark lines. Please upload an image with high contrast lines on a light background (like a dark logo or sketch).");
+                return;
+            }
+
+            // Downsample further if too many points to avoid blocking the main thread for minutes
+            const MAX_POINTS = 800;
+            if (blackPixels.length > MAX_POINTS) {
+                const step = Math.ceil(blackPixels.length / MAX_POINTS);
+                blackPixels = blackPixels.filter((_, idx) => idx % step === 0);
+            }
+
+            // 3. Simple Traveling Salesperson Problem (Greedy Nearest Neighbor)
+            // This attempts to sort the unordered points into a continuous drawable path
+            let path = [];
+            let current = blackPixels[0];
+            path.push(current);
+            blackPixels.splice(0, 1);
+
+            while (blackPixels.length > 0) {
+                let nearestIdx = 0;
+                let minDist = Infinity;
+
+                for (let i = 0; i < blackPixels.length; i++) {
+                    const p = blackPixels[i];
+                    const distSq = (p.x - current.x) ** 2 + (p.y - current.y) ** 2;
+                    if (distSq < minDist) {
+                        minDist = distSq;
+                        nearestIdx = i;
+                    }
+                }
+
+                current = blackPixels[nearestIdx];
+                path.push(current);
+                blackPixels.splice(nearestIdx, 1);
+            }
+
+            // 4. Compute Discrete Vector Transform
+            vectorData = computeDFT(path);
+
+            // Sort epicycles by largest radius (amplitude) first
+            vectorData.sort((a, b) => b.amp - a.amp);
+
+            // 5. Begin rendering
+            time = 0;
+            drawnPath = [];
+            isDrawing = true;
+            loading.style.display = 'none';
+            drawBtn.disabled = false;
+
+            renderLoop();
+        }
+
+        // Standard Discrete Vector Transform algorithm (O(N^2))
+        function computeDFT(vals) {
+            const N = vals.length;
+            let X = [];
+            for (let k = 0; k < N; k++) {
+                let re = 0;
+                let im = 0;
+                for (let n = 0; n < N; n++) {
+                    const phi = (2 * Math.PI * k * n) / N;
+                    const x = vals[n].x;
+                    const y = vals[n].y;
+
+                    // Complex multiplication: (x + iy) * (cos(phi) - i*sin(phi))
+                    re += x * Math.cos(phi) + y * Math.sin(phi);
+                    im += y * Math.cos(phi) - x * Math.sin(phi);
+                }
+                re = re / N;
+                im = im / N;
+                X[k] = {
+                    freq: k,
+                    amp: Math.sqrt(re * re + im * im),
+                    phase: Math.atan2(im, re)
+                };
+            }
+            return X;
+        }
+
+        function renderLoop() {
+            if (!isDrawing) return;
+
+            // Clear background
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Start circles at the center of the canvas
+            let x = canvas.width / 2;
+            let y = canvas.height / 2;
+
+            for (let i = 0; i < vectorData.length; i++) {
+                let prevx = x;
+                let prevy = y;
+
+                let freq = vectorData[i].freq;
+                let radius = vectorData[i].amp;
+                let phase = vectorData[i].phase;
+
+                x += radius * Math.cos(freq * time + phase);
+                y += radius * Math.sin(freq * time + phase);
+
+                // For rendering performance and visual clarity, only draw epicycles of a certain size
+                if (radius > 1) {
+                    ctx.beginPath();
+                    ctx.arc(prevx, prevy, radius, 0, 2 * Math.PI);
+                    ctx.strokeStyle = "rgba(148, 163, 184, 0.2)";
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.moveTo(prevx, prevy);
+                    ctx.lineTo(x, y);
+                    ctx.strokeStyle = "rgba(148, 163, 184, 0.5)";
+                    ctx.stroke();
+                }
+            }
+
+            // The final 'x' and 'y' is the tip of the sequence of epicycles
+            drawnPath.unshift({ x, y });
+
+            // Draw the final path tracing
+            ctx.beginPath();
+            ctx.moveTo(drawnPath[0].x, drawnPath[0].y);
+            for (let i = 1; i < drawnPath.length; i++) {
+                ctx.lineTo(drawnPath[i].x, drawnPath[i].y);
+            }
+            ctx.strokeStyle = "#38bdf8"; // Light blue tracing line
+            ctx.lineWidth = 2.5;
+            ctx.lineJoin = "round";
+            ctx.lineCap = "round";
+            ctx.stroke();
+            ctx.lineWidth = 1;
+
+            // Free some memory by dropping old parts of the path once the drawing loops
+            if (drawnPath.length > vectorData.length) {
+                drawnPath.pop();
+            }
+
+            // Advance time
+            const dt = (2 * Math.PI) / vectorData.length;
+            time += dt;
+
+            // Restart drawing cycle
+            if (time >= Math.PI * 2) {
+                time = 0;
+                drawnPath = [];
+            }
+
+            animationFrameId = requestAnimationFrame(renderLoop);
+        }
+    </script>
+</body>
+
+</html>
